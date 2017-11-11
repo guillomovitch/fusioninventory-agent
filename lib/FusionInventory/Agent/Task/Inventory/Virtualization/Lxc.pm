@@ -113,6 +113,17 @@ sub  _getVirtualMachines {
             logger => $params{logger}
         );
 
+        my $rootfs = getFirstMatch(
+            command => "/usr/bin/lxc-info -n '$name' -c lxc.rootfs",
+            pattern => qr/^lxc.rootfs\s*=\s*(.+)$/,
+            logger  => $params{logger}
+        );
+
+        if ($rootfs =~ /^overlayfs:/) {
+            my @overlayfs = split(/:/,$rootfs);
+            $rootfs = $overlayfs[2];
+        }
+
         my $machineid = ( $status && $status eq STATUS_RUNNING ) ?
             getFirstLine(
                 command => "/usr/bin/lxc-attach -n '$name' -- cat /etc/machine-id",
@@ -120,13 +131,12 @@ sub  _getVirtualMachines {
             )
             :
             _getVirtualMachineId(
-                command => "/usr/bin/lxc-info -n '$name' -c lxc.rootfs",
-                pattern => qr/^lxc.rootfs\s*=\s*(.+)$/,
-                logger  => $params{logger}
+                file   => "$rootfs/etc/machine-id",
+                logger => $params{logger}
             );
 
         my $config = _getVirtualMachineConfig(
-            file => "/var/lib/lxc/$name/config",
+            file   => "$rootfs/config",
             logger => $params{logger}
         );
 
@@ -147,18 +157,8 @@ sub  _getVirtualMachines {
 sub  _getVirtualMachineId {
     my (%params) = @_;
 
-    my $rootfs = getFirstMatch(%params);
-    return unless $rootfs;
-
-    if ($rootfs =~ /^overlayfs:/) {
-        my @overlayfs = split(/:/,$rootfs);
-        $rootfs = $overlayfs[2];
-    }
-
-    return unless -e "$rootfs/etc/machine-id";
-
-    return  getFirstLine(
-        file   => "$rootfs/etc/machine-id",
+    return getFirstLine(
+        file   => $params{file},
         logger => $params{logger}
     );
 }
